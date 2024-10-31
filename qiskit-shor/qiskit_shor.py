@@ -30,8 +30,11 @@ from utils import *
 
 # from qiskit.utils.validation import validate_min
 # from qiskit.utils.quantum_instance import QuantumInstance
-from ..algorithm_result import AlgorithmResult
-from ..exceptions import AlgorithmError
+from qiskit.providers import Backend
+from qiskit.primitives import Sampler
+from qiskit.primitives import Estimator
+from qiskit import transpile
+
 
 logger = logging.getLogger(__name__)
 
@@ -49,17 +52,13 @@ class Shor:
     See also https://arxiv.org/abs/quant-ph/0205095
     """
 
-    def __init__(
-        self, quantum_instance: Optional[Union[QuantumInstance, Backend]] = None
-    ) -> None:
+    def __init__(self, backend: Optional[Union[Backend]] = None) -> None:
         """
         Args:
             quantum_instance: Quantum Instance or Backend
 
         """
-        self._quantum_instance = None
-        if quantum_instance:
-            self.quantum_instance = quantum_instance
+        self._backend = backend
 
         self._n = None  # type: Optional[int]
         self._up_qreg = None
@@ -73,17 +72,25 @@ class Shor:
         self._iphi_add_N = None
 
     @property
-    def quantum_instance(self):
-        """Returns quantum instance."""
-        return self._quantum_instance
+    def backend(self):
+        """Returns quantum backend."""
+        return self._backend
 
-    @quantum_instance.setter
-    def quantum_instance(self, quantum_instance: Union[Backend]) -> None:
-        """Sets quantum instance."""
-        if isinstance(quantum_instance, (Backend)):
-            # what should this be replaced by?
-            quantum_instance = QuantumInstance(quantum_instance)
-        self._quantum_instance = quantum_instance
+    @backend.setter
+    def backend(self, backend: Backend) -> None:
+        """Sets quantum backend."""
+        self._backend = backend
+
+    def _validate_input(self, N: int, a: int) -> None:
+        """Validates the input parameters."""
+        if N < 3:
+            raise ValueError("N must be at least 3")
+        if a < 2:
+            raise ValueError("a must be at least 2")
+        if N < 1 or N % 2 == 0:
+            raise ValueError("The input needs to be an odd integer greater than 1.")
+        if a >= N or math.gcd(a, N) != 1:
+            raise ValueError("The integer a needs to satisfy a < N and gcd(a, N) = 1.")
 
     def _get_angles(self, a: int) -> np.ndarray:
         """Calculates the array of angles to be used in the addition in Fourier Space."""
@@ -266,7 +273,7 @@ class Shor:
             circuit.measure(self._up_qreg, up_cqreg)
 
         # logger.info(summarize_circuits(circuit))
-
+        circuit = circuit.decompose()
         return circuit
 
     @staticmethod
@@ -417,21 +424,10 @@ class Shor:
             AlgorithmError: If a quantum instance or backend has not been provided
 
         """
-        validate_min("N", N, 3)
-        validate_min("a", a, 2)
+        self._validate_input(N, a)
 
-        # check the input integer
-        if N < 1 or N % 2 == 0:
-            raise ValueError("The input needs to be an odd integer greater than 1.")
-
-        if a >= N or math.gcd(a, N) != 1:
-            raise ValueError("The integer a needs to satisfy a < N and gcd(a, N) = 1.")
-
-        if self.quantum_instance is None:
-            raise AlgorithmError(
-                "A QuantumInstance or Backend "
-                "must be supplied to run the quantum algorithm."
-            )
+        if self.backend is None:
+            raise ValueError("A Backend must be supplied to run the quantum algorithm.")
 
         result = ShorResult()
 
@@ -444,27 +440,37 @@ class Shor:
         if not result.factors:
             logger.debug("Running with N=%s and a=%s.", N, a)
 
-            if self._quantum_instance.is_statevector:
-                circuit = self.construct_circuit(N=N, a=a, measurement=False)
-                logger.warning(
-                    "The statevector_simulator might lead to "
-                    "subsequent computation using too much memory."
-                )
-                result = self._quantum_instance.execute(circuit)
-                complete_state_vec = result.get_statevector(circuit)
-                # TODO: this uses too much memory
-                up_qreg_density_mat = partial_trace(
-                    complete_state_vec, range(2 * self._n, 4 * self._n + 2)
-                )
-                up_qreg_density_mat_diag = np.diag(up_qreg_density_mat)
+            # unclear why you'd want this one?
+            # if (
+            #     hasattr(self.backend, "name")
+            #     and self.backend.name() == "statevector_simulator"
+            # ):
+            #     print("not clear it goes in here")
+            #     circuit = self.construct_circuit(N=N, a=a, measurement=False)
+            #     circuit.save_statevector()
+            #     logger.warning(
+            #         "The statevector_simulator might lead to "
+            #         "subsequent computation using too much memory."
+            #     )
+            #     job = self.backend.run(circuit)
+            #     result_obj = job.result()
+            #     complete_state_vec = result_obj.get_statevector(circuit)
+            #     up_qreg_density_mat = partial_trace(
+            #         complete_state_vec, range(2 * self._n, 4 * self._n + 2)
+            #     )
+            #     up_qreg_density_mat_diag = np.diag(up_qreg_density_mat)
 
-                counts = dict()
-                for i, v in enumerate(up_qreg_density_mat_diag):
-                    if not v == 0:
-                        counts[bin(int(i))[2:].zfill(2 * self._n)] = v**2
-            else:
-                circuit = self.construct_circuit(N=N, a=a, measurement=True)
-                counts = self._quantum_instance.execute(circuit).get_counts(circuit)
+            #     counts = dict()
+            #     for i, v in enumerate(up_qreg_density_mat_diag):
+            #         if not v == 0:
+            #             counts[bin(int(i))[2:].zfill(2 * self._n)] = v**2
+            # else:
+
+            circuit = self.construct_circuit(N=N, a=a, measurement=True)
+            # print(circuit)
+            circuit = transpile(circuit, self.backend)
+            job = self.backend.run(circuit)
+            counts = job.result().get_counts(circuit)
 
             result.total_counts = len(counts)
 
