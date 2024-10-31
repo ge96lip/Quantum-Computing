@@ -130,20 +130,24 @@ class Shor:
 
         circuit.append(phi_add_a.control(2), [ctl_up, ctl_down, *qubits])
         circuit.append(self._iphi_add_N, qubits)
-        circuit.append(self._iqft, qubits)
+        iqft = QFT(len(qubits), do_swaps=False).to_instruction().inverse()
+        circuit.append(iqft, qubits)
 
         circuit.cx(qubits[0], ctl_aux)
 
-        circuit.append(self._qft, qubits)
+        qft = QFT(len(qubits), do_swaps=False).to_instruction()
+        circuit.append(qft, qubits)
         circuit.append(self._phi_add_N, qubits)
         circuit.append(iphi_add_a.control(2), [ctl_up, ctl_down, *qubits])
-        circuit.append(self._iqft, qubits)
+        iqft = QFT(len(qubits), do_swaps=False).to_instruction().inverse()
+        circuit.append(iqft, qubits)
 
         circuit.x(qubits[0])
         circuit.cx(qubits[0], ctl_aux)
         circuit.x(qubits[0])
 
-        circuit.append(self._qft, qubits)
+        qft = QFT(len(qubits), do_swaps=False).to_instruction()
+        circuit.append(qft, qubits)
         circuit.append(phi_add_a.control(2), [ctl_up, ctl_down, *qubits])
         return circuit
 
@@ -157,6 +161,7 @@ class Shor:
         down = circuit.qubits[1 : self._n + 1]
         aux = circuit.qubits[self._n + 1 :]
         qubits = [aux[i] for i in reversed(range(self._n + 1))]
+        # qubits = aux[:-1]
 
         ctl_up = 0
         ctl_aux = aux[-1]
@@ -171,27 +176,30 @@ class Shor:
         circuit.append(qft, qubits)
 
         # # perform controlled addition by a on the aux register in Fourier space
-        # for i, ctl_down in enumerate(down):
-        #     a_exp = (2**i) * a % N
-        #     angles = self._get_angles(a_exp)
-        #     bound = double_controlled_phi_add.assign_parameters({angle_params: angles})
-        #     circuit.append(bound, [ctl_up, ctl_down, ctl_aux, *qubits])
+        for i, ctl_down in enumerate(down):
+            a_exp = (2**i) * a % N
+            angles = self._get_angles(a_exp)
+            bound = double_controlled_phi_add.assign_parameters({angle_params: angles})
+            circuit.append(bound, [ctl_up, ctl_down, ctl_aux, *qubits])
 
-        # circuit.append(self._iqft, qubits)
+        iqft = QFT(len(qubits), do_swaps=False).to_instruction().inverse()
+        circuit.append(iqft, qubits)
 
         # # perform controlled subtraction by a in Fourier space on both the aux and down register
-        # for j in range(self._n):
-        #     circuit.cswap(ctl_up, down[j], aux[j])
-        # circuit.append(self._qft, qubits)
+        for j in range(self._n):
+            circuit.cswap(ctl_up, down[j], aux[j])
+        qft = QFT(len(qubits), do_swaps=False).to_instruction()
+        circuit.append(qft, qubits)
 
-        # a_inv = self.modinv(a, N)
-        # for i in reversed(range(len(down))):
-        #     a_exp = (2**i) * a_inv % N
-        #     angles = self._get_angles(a_exp)
-        #     bound = idouble_controlled_phi_add.assign_parameters({angle_params: angles})
-        #     circuit.append(bound, [ctl_up, down[i], ctl_aux, *qubits])
+        a_inv = self.modinv(a, N)
+        for i in reversed(range(len(down))):
+            a_exp = (2**i) * a_inv % N
+            angles = self._get_angles(a_exp)
+            bound = idouble_controlled_phi_add.assign_parameters({angle_params: angles})
+            circuit.append(bound, [ctl_up, down[i], ctl_aux, *qubits])
 
-        # circuit.append(self._iqft, qubits)
+        iqft = QFT(len(qubits), do_swaps=False).to_instruction().inverse()
+        circuit.append(iqft, qubits)
         return circuit.to_instruction()
 
     def construct_circuit(
