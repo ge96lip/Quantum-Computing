@@ -482,7 +482,7 @@ class Shor:
                 circuit = self.construct_circuit(N=N, a=a, measurement=True)
                 # print(circuit)
                 circuit = transpile(circuit, self.backend)
-                job = self.backend.run(circuit)
+                job = self.backend.run(circuit, shots=256)
                 counts = job.result().get_counts(circuit)
 
             result.total_counts = len(counts)
