@@ -157,6 +157,7 @@ class Shor:
         down = circuit.qubits[1 : self._n + 1]
         aux = circuit.qubits[self._n + 1 :]
         qubits = [aux[i] for i in reversed(range(self._n + 1))]
+
         ctl_up = 0
         ctl_aux = aux[-1]
 
@@ -166,30 +167,31 @@ class Shor:
         )
         idouble_controlled_phi_add = double_controlled_phi_add.inverse()
 
-        circuit.append(self._qft, qubits)
+        qft = QFT(len(qubits), do_swaps=False).to_instruction()
+        circuit.append(qft, qubits)
 
-        # perform controlled addition by a on the aux register in Fourier space
-        for i, ctl_down in enumerate(down):
-            a_exp = (2**i) * a % N
-            angles = self._get_angles(a_exp)
-            bound = double_controlled_phi_add.assign_parameters({angle_params: angles})
-            circuit.append(bound, [ctl_up, ctl_down, ctl_aux, *qubits])
+        # # perform controlled addition by a on the aux register in Fourier space
+        # for i, ctl_down in enumerate(down):
+        #     a_exp = (2**i) * a % N
+        #     angles = self._get_angles(a_exp)
+        #     bound = double_controlled_phi_add.assign_parameters({angle_params: angles})
+        #     circuit.append(bound, [ctl_up, ctl_down, ctl_aux, *qubits])
 
-        circuit.append(self._iqft, qubits)
+        # circuit.append(self._iqft, qubits)
 
-        # perform controlled subtraction by a in Fourier space on both the aux and down register
-        for j in range(self._n):
-            circuit.cswap(ctl_up, down[j], aux[j])
-        circuit.append(self._qft, qubits)
+        # # perform controlled subtraction by a in Fourier space on both the aux and down register
+        # for j in range(self._n):
+        #     circuit.cswap(ctl_up, down[j], aux[j])
+        # circuit.append(self._qft, qubits)
 
-        a_inv = self.modinv(a, N)
-        for i in reversed(range(len(down))):
-            a_exp = (2**i) * a_inv % N
-            angles = self._get_angles(a_exp)
-            bound = idouble_controlled_phi_add.assign_parameters({angle_params: angles})
-            circuit.append(bound, [ctl_up, down[i], ctl_aux, *qubits])
+        # a_inv = self.modinv(a, N)
+        # for i in reversed(range(len(down))):
+        #     a_exp = (2**i) * a_inv % N
+        #     angles = self._get_angles(a_exp)
+        #     bound = idouble_controlled_phi_add.assign_parameters({angle_params: angles})
+        #     circuit.append(bound, [ctl_up, down[i], ctl_aux, *qubits])
 
-        circuit.append(self._iqft, qubits)
+        # circuit.append(self._iqft, qubits)
         return circuit.to_instruction()
 
     def construct_circuit(
@@ -244,14 +246,14 @@ class Shor:
         )
         self._iphi_add_N = self._phi_add_N.inverse()
 
-        # Create maximal superposition in top register
+        # # Create maximal superposition in top register
         circuit.h(self._up_qreg)
 
-        # Initialize down register to 1
+        # # Initialize down register to 1
         circuit.x(self._down_qreg[0])
 
-        # Apply the multiplication gates as showed in
-        # the report in order to create the exponentiation
+        # # Apply the multiplication gates as showed in
+        # # the report in order to create the exponentiation
         for i, ctl_up in enumerate(self._up_qreg):  # type: ignore
             a_aux = int(pow(a, pow(2, i)))
             controlled_multiple_mod_N = self._controlled_multiple_mod_N(
@@ -263,7 +265,7 @@ class Shor:
                 controlled_multiple_mod_N, [ctl_up, *self._down_qreg, *self._aux_qreg]
             )
 
-        # Apply inverse QFT
+        # # Apply inverse QFT
         iqft = QFT(len(self._up_qreg)).inverse().to_instruction()
         circuit.append(iqft, self._up_qreg)
 
@@ -272,8 +274,6 @@ class Shor:
             circuit.add_register(up_cqreg)
             circuit.measure(self._up_qreg, up_cqreg)
 
-        # logger.info(summarize_circuits(circuit))
-        circuit = circuit.decompose()
         return circuit
 
     @staticmethod
@@ -440,37 +440,42 @@ class Shor:
         if not result.factors:
             logger.debug("Running with N=%s and a=%s.", N, a)
 
-            # unclear why you'd want this one?
-            # if (
-            #     hasattr(self.backend, "name")
-            #     and self.backend.name() == "statevector_simulator"
-            # ):
-            #     print("not clear it goes in here")
-            #     circuit = self.construct_circuit(N=N, a=a, measurement=False)
-            #     circuit.save_statevector()
-            #     logger.warning(
-            #         "The statevector_simulator might lead to "
-            #         "subsequent computation using too much memory."
-            #     )
-            #     job = self.backend.run(circuit)
-            #     result_obj = job.result()
-            #     complete_state_vec = result_obj.get_statevector(circuit)
-            #     up_qreg_density_mat = partial_trace(
-            #         complete_state_vec, range(2 * self._n, 4 * self._n + 2)
-            #     )
-            #     up_qreg_density_mat_diag = np.diag(up_qreg_density_mat)
+            if (
+                hasattr(self.backend, "name")
+                and self.backend.name == "aer_simulator_statevector"
+            ):
+                print("statevector")
+                circuit = self.construct_circuit(N=N, a=a, measurement=False)
+                circuit.save_statevector()
+                circuit = transpile(
+                    circuit,
+                    self.backend,
+                )
 
-            #     counts = dict()
-            #     for i, v in enumerate(up_qreg_density_mat_diag):
-            #         if not v == 0:
-            #             counts[bin(int(i))[2:].zfill(2 * self._n)] = v**2
-            # else:
+                # circuit = transpile(circuit, self.backend)
+                logger.warning(
+                    "The statevector_simulator might lead to "
+                    "subsequent computation using too much memory."
+                )
+                job = self.backend.run(circuit)
+                result_obj = job.result()
+                complete_state_vec = result_obj.get_statevector(circuit)
+                up_qreg_density_mat = partial_trace(
+                    complete_state_vec, range(2 * self._n, 4 * self._n + 2)
+                )
+                up_qreg_density_mat_diag = np.diag(up_qreg_density_mat)
 
-            circuit = self.construct_circuit(N=N, a=a, measurement=True)
-            # print(circuit)
-            circuit = transpile(circuit, self.backend)
-            job = self.backend.run(circuit)
-            counts = job.result().get_counts(circuit)
+                counts = dict()
+                for i, v in enumerate(up_qreg_density_mat_diag):
+                    if not v == 0:
+                        counts[bin(int(i))[2:].zfill(2 * self._n)] = v**2
+            else:
+
+                circuit = self.construct_circuit(N=N, a=a, measurement=True)
+                # print(circuit)
+                circuit = transpile(circuit, self.backend)
+                job = self.backend.run(circuit)
+                counts = job.result().get_counts(circuit)
 
             result.total_counts = len(counts)
 
