@@ -508,7 +508,7 @@ class Shor:
 
         return result
 
-    def package_result(self, job, circuit, N, a):
+    def package_result(self, job, N, a):
         result = ShorResult()
         # print(job.result()[0].data.m.get_counts())
         counts = job.result()[0].data.m.get_counts()
