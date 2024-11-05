@@ -31,7 +31,7 @@ from utils import *
 # from qiskit.utils.validation import validate_min
 # from qiskit.utils.quantum_instance import QuantumInstance
 from qiskit.providers import Backend
-from qiskit.primitives import Sampler
+from qiskit_ibm_runtime import SamplerOptions, Sampler
 from qiskit.primitives import Estimator
 from qiskit import transpile
 
@@ -482,7 +482,11 @@ class Shor:
                 circuit = self.construct_circuit(N=N, a=a, measurement=True)
                 # print(circuit)
                 circuit = transpile(circuit, self.backend)
-                job = self.backend.run(circuit, shots=256)
+                options = SamplerOptions(environment={"job_tags": [f"{N}/{a}"]})
+                sampler = Sampler(mode=self.backend, options=options)
+                # job = sampler.run([circuit], shots=128, job_tags=[f"{N}/{a}"])
+                job = sampler.run([circuit], shots=128)
+                return job, circuit
                 counts = job.result().get_counts(circuit)
 
             result.total_counts = len(counts)
@@ -501,6 +505,29 @@ class Shor:
                     result.successful_counts = result.successful_counts + 1
                     if factors not in result.factors:
                         result.factors.append(factors)
+
+        return result
+
+    def package_result(self, job, circuit, N, a):
+        result = ShorResult()
+        # print(job.result()[0].data.m.get_counts())
+        counts = job.result()[0].data.m.get_counts()
+        result.total_counts = len(counts)
+
+        # For each simulation result, print proper info to user
+        # and try to calculate the factors of N
+        for measurement in list(counts.keys()):
+            # Get the x_final value from the final state qubits
+            logger.info("------> Analyzing result %s.", measurement)
+            factors = self._get_factors(N, a, measurement)
+
+            if factors:
+                logger.info(
+                    "Found factors %s from measurement %s.", factors, measurement
+                )
+                result.successful_counts = result.successful_counts + 1
+                if factors not in result.factors:
+                    result.factors.append(factors)
 
         return result
 
