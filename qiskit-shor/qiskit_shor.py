@@ -18,8 +18,10 @@ import array
 import fractions
 import logging
 import numpy as np
+import matplotlib
 
 from qiskit import ClassicalRegister, QuantumCircuit, QuantumRegister
+from qiskit.visualization import plot_histogram
 from qiskit.circuit import Gate, Instruction, ParameterVector
 from qiskit.circuit.library import QFT
 from qiskit.providers import Backend
@@ -467,6 +469,8 @@ class Shor:
                 )
                 job = self.backend.run(circuit)
                 result_obj = job.result()
+                counts = result_obj.get_counts()
+                result.counts = counts
                 complete_state_vec = result_obj.get_statevector(circuit)
                 up_qreg_density_mat = partial_trace(
                     complete_state_vec, range(2 * self._n, 4 * self._n + 2)
@@ -540,6 +544,7 @@ class ShorResult(AlgorithmResult):
         self._factors = []
         self._total_counts = 0
         self._successful_counts = 0
+        self.counts = None
 
     @property
     def factors(self) -> List[List[int]]:
