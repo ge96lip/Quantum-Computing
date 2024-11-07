@@ -17,6 +17,7 @@ import math
 import array
 import fractions
 import logging
+import time
 import numpy as np
 import matplotlib
 
@@ -467,7 +468,12 @@ class Shor:
                     "The statevector_simulator might lead to "
                     "subsequent computation using too much memory."
                 )
-                job = self.backend.run(circuit)
+                quantum_time_start = time.time()
+                job = self.backend.run(circuit, options={'shots': 1000})
+                quantum_time_end = time.time()
+                quantum_diff = quantum_time_end - quantum_time_start
+                result.quantum_time = quantum_diff
+
                 result_obj = job.result()
                 counts = result_obj.get_counts()
                 result.counts = counts
@@ -486,21 +492,26 @@ class Shor:
                 circuit = self.construct_circuit(N=N, a=a, measurement=True)
                 # print(circuit)
                 circuit = transpile(circuit, self.backend)
-                options = SamplerOptions(environment={"job_tags": [f"{N}/{a}"]})
+                options = SamplerOptions(environment={"job_tags": [f"{N}/{a}"]}, default_shots=128)
                 sampler = Sampler(mode=self.backend, options=options)
                 # job = sampler.run([circuit], shots=128, job_tags=[f"{N}/{a}"])
+                q_start = time.time()
                 job = sampler.run([circuit], shots=128)
-                return job, circuit
+                q_end = time.time()
+                quantum_time = q_end - q_start
+                return job, circuit, quantum_time
                 counts = job.result().get_counts(circuit)
 
             result.total_counts = len(counts)
 
             # For each simulation result, print proper info to user
             # and try to calculate the factors of N
+            c_start = time.time()
             for measurement in list(counts.keys()):
                 # Get the x_final value from the final state qubits
                 logger.info("------> Analyzing result %s.", measurement)
                 factors = self._get_factors(N, a, measurement)
+
 
                 if factors:
                     logger.info(
@@ -509,6 +520,9 @@ class Shor:
                     result.successful_counts = result.successful_counts + 1
                     if factors not in result.factors:
                         result.factors.append(factors)
+            c_end = time.time()
+            c_diff = c_end - c_start
+            result.classical_time = c_diff
 
         return result
 
@@ -520,6 +534,7 @@ class Shor:
 
         # For each simulation result, print proper info to user
         # and try to calculate the factors of N
+        c_start = time.time()
         for measurement in list(counts.keys()):
             # Get the x_final value from the final state qubits
             logger.info("------> Analyzing result %s.", measurement)
@@ -532,7 +547,8 @@ class Shor:
                 result.successful_counts = result.successful_counts + 1
                 if factors not in result.factors:
                     result.factors.append(factors)
-
+        c_end = time.time()
+        result.classical_time = c_end - c_start
         return result
 
 
@@ -545,6 +561,8 @@ class ShorResult(AlgorithmResult):
         self._total_counts = 0
         self._successful_counts = 0
         self.counts = None
+        self.quantum_time = None
+        self.classical_time = None
 
     @property
     def factors(self) -> List[List[int]]:
