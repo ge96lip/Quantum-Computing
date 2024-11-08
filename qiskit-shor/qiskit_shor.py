@@ -469,7 +469,7 @@ class Shor:
                     "subsequent computation using too much memory."
                 )
                 quantum_time_start = time.time()
-                job = self.backend.run(circuit, options={'shots': 1000})
+                job = self.backend.run(circuit, options={"shots": 1000})
                 quantum_time_end = time.time()
                 quantum_diff = quantum_time_end - quantum_time_start
                 result.quantum_time = quantum_diff
@@ -492,7 +492,9 @@ class Shor:
                 circuit = self.construct_circuit(N=N, a=a, measurement=True)
                 # print(circuit)
                 circuit = transpile(circuit, self.backend)
-                options = SamplerOptions(environment={"job_tags": [f"{N}/{a}"]}, default_shots=128)
+                options = SamplerOptions(
+                    environment={"job_tags": [f"{N}/{a}"]}, default_shots=128
+                )
                 sampler = Sampler(mode=self.backend, options=options)
                 # job = sampler.run([circuit], shots=128, job_tags=[f"{N}/{a}"])
                 q_start = time.time()
@@ -511,7 +513,6 @@ class Shor:
                 # Get the x_final value from the final state qubits
                 logger.info("------> Analyzing result %s.", measurement)
                 factors = self._get_factors(N, a, measurement)
-
 
                 if factors:
                     logger.info(
