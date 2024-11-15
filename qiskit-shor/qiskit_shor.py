@@ -41,6 +41,7 @@ from qiskit import transpile
 
 logger = logging.getLogger(__name__)
 
+
 # pylint: disable=invalid-name
 
 
@@ -73,6 +74,9 @@ class Shor:
 
         self._phi_add_N = None  # type: Optional[Gate]
         self._iphi_add_N = None
+        self.multiple_c = None
+        self.ccphi = None
+        self.ccphi_inv = None
 
     @property
     def backend(self):
@@ -183,6 +187,8 @@ class Shor:
             a_exp = (2**i) * a % N
             angles = self._get_angles(a_exp)
             bound = double_controlled_phi_add.assign_parameters({angle_params: angles})
+            if self.ccphi is None:
+                self.ccphi = bound
             circuit.append(bound, [ctl_up, ctl_down, ctl_aux, *qubits])
 
         iqft = QFT(len(qubits), do_swaps=False).to_instruction().inverse()
@@ -199,10 +205,14 @@ class Shor:
             a_exp = (2**i) * a_inv % N
             angles = self._get_angles(a_exp)
             bound = idouble_controlled_phi_add.assign_parameters({angle_params: angles})
+            if self.ccphi_inv is None:
+                self.ccphi_inv = bound
             circuit.append(bound, [ctl_up, down[i], ctl_aux, *qubits])
 
         iqft = QFT(len(qubits), do_swaps=False).to_instruction().inverse()
         circuit.append(iqft, qubits)
+        if self.multiple_c is None:
+            self.multiple_c = circuit
         return circuit.to_instruction()
 
     def construct_circuit(
