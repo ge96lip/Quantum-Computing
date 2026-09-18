@@ -1,4 +1,15 @@
 # %% [markdown]
+# This file contains material adapted from the Qiskit Textbook,
+# Copyright Contributors to the Qiskit project,
+# licensed under the Apache License, Version 2.0.
+#
+# The material was modified as part of coursework for DD2367
+# Quantum Computing for Computer Scientists at KTH Royal Institute
+# of Technology.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# %% [markdown]
 # # Shor's Algorithm
 
 # %% [markdown]
